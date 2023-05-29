@@ -53,7 +53,6 @@ def main():
         proxy = server.create_proxy()
 
         options, caps = driver_settings(proxy.proxy, False)
-        url = "https://lms.partaonline.ru/"
 
         driver = webdriver.Chrome(
             service=Service("binaries/chromedriver"),
@@ -63,19 +62,7 @@ def main():
 
         proxy.new_har("google")
 
-        driver.get(url)
-
-        # try:
-        #     advanced_button = driver.get(By.ID, "details-button")
-        #     advanced_button.click()
-
-        #     time.sleep(3)
-
-        #     proceed_button = driver.get(By.ID, "proceed-link")
-        #     proceed_button.click()
-
-        # except Exception as error:
-        #     print(error)
+        driver.get("https://lms.partaonline.ru/")
 
         time.sleep(10)
 
@@ -97,28 +84,42 @@ def main():
 
         time.sleep(5)
 
-        moi_gruppy = driver.find_element(By.CLASS_NAME, "group__item")
-        moi_gruppy.click()
+        urls_json = json.load(open("downloads/urls.json"))
 
-        time.sleep(5)
+        for url in urls_json["urls"][:3]:
+            driver.switch_to.new_window("tab")
+            driver.switch_to.window(driver.window_handles[0])
+            driver.close()
+            driver.switch_to.window(driver.window_handles[0])
 
-        lessons = driver.find_elements(By.CLASS_NAME, "list__item")
-        lesson_button = lessons[0].find_element(By.CLASS_NAME, "link")
-        lesson_button.click()
+            time.sleep(10)
 
-        time.sleep(10)
+            driver.get(url)
 
-        video = driver.find_element(By.CLASS_NAME, "content__video")
-        video.click()
+            time.sleep(10)
 
-        time.sleep(10)
+            all_divs = driver.find_elements(By.TAG_NAME, "div")
+            print(len(all_divs))
+            print(all_divs[0].text)
 
-        har_logs = proxy.har  # type is dict
-        url = ""
-        for entry in har_logs["log"]["entries"]:
-            if entry["request"]["url"].endswith(".mpd"):
-                url = entry["request"]["url"]
-        print(url)
+            title_div = driver.find_element(
+                By.CLASS_NAME, "page-description__info__description"
+            )
+            title_text = title_div.find_element(By.TAG_NAME, "h1").text
+
+            if "Обществознание" in title_text:
+                videos = driver.find_element(By.TAG_NAME, "video")
+                print(len(videos))
+                # video.click()
+
+                # time.sleep(10)
+
+                # har_logs = proxy.har  # type is dict
+                # url = ""
+                # for entry in har_logs["log"]["entries"]:
+                #     if entry["request"]["url"].endswith(".mpd"):
+                #         url = entry["request"]["url"]
+                # print(url)
 
     except Exception as error:
         print(error)
