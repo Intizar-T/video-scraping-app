@@ -187,5 +187,6 @@ pip-selfcheck.json
 
 ### etc ###
 .DS_Store
-
+/binaries
+/logs
 # End of https://www.toptal.com/developers/gitignore/api/python,venv
