@@ -2,17 +2,27 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.service import Service
+
+from browsermobproxy import Server
+
 import time
 import json
-import pprint
+import os
 
 
-def driver_settings(headless: bool = True):
+def driver_settings(proxy, headless: bool = True):
     opts = Options()
+
     caps = DesiredCapabilities.CHROME
     caps["goog:loggingPrefs"] = {"performance": "ALL"}
+
     if headless:
-        opts.add_argument(" --headless")
+        opts.add_argument("--headless")
+
+    opts.add_argument("--ignore-certificate-errors")
+    opts.add_argument("--proxy-server={0}".format(proxy))
+
     return opts, caps
 
 
@@ -37,90 +47,81 @@ def process_browser_logs_for_network_events(logs):
 
 
 def main():
-    options, caps = driver_settings(False)
-    driver = webdriver.Chrome(
-        "chromedriver", options=options, desired_capabilities=caps
-    )
-    url = "https://lms.partaonline.ru/"
-    driver.get(url)
+    try:
+        server = Server("binaries/browsermob-proxy-2.1.4/bin/browsermob-proxy")
+        server.start()
+        proxy = server.create_proxy()
 
-    signin_button = driver.find_element(By.CLASS_NAME, "button")
-    signin_button.click()
+        options, caps = driver_settings(proxy.proxy, False)
+        url = "https://lms.partaonline.ru/"
 
-    time.sleep(5)
+        driver = webdriver.Chrome(
+            service=Service("binaries/chromedriver"),
+            options=options,
+            desired_capabilities=caps,
+        )
 
-    inputs = driver.find_elements(By.CLASS_NAME, "oauth_form_input")
-    phone_input = inputs[0]
-    phone_input.send_keys("+79065472854")
-    password_input = inputs[1]
-    password_input.send_keys("@interval8#")
+        proxy.new_har("google")
 
-    time.sleep(5)
+        driver.get(url)
 
-    vk_signin_button = driver.find_element(By.CLASS_NAME, "flat_button")
-    vk_signin_button.click()
+        # try:
+        #     advanced_button = driver.get(By.ID, "details-button")
+        #     advanced_button.click()
 
-    time.sleep(5)
+        #     time.sleep(3)
 
-    moi_gruppy = driver.find_element(By.CLASS_NAME, "group__item")
-    moi_gruppy.click()
+        #     proceed_button = driver.get(By.ID, "proceed-link")
+        #     proceed_button.click()
 
-    time.sleep(5)
+        # except Exception as error:
+        #     print(error)
 
-    lessons = driver.find_elements(By.CLASS_NAME, "list__item")
-    lesson_button = lessons[0].find_element(By.CLASS_NAME, "link")
-    lesson_button.click()
+        time.sleep(10)
 
-    time.sleep(10)
+        signin_button = driver.find_element(By.CLASS_NAME, "button")
+        signin_button.click()
 
-    video = driver.find_element(By.CLASS_NAME, "content__video")
-    video.click()
+        time.sleep(5)
 
-    time.sleep(10)
+        inputs = driver.find_elements(By.CLASS_NAME, "oauth_form_input")
+        phone_input = inputs[0]
+        phone_input.send_keys("+79065472854")
+        password_input = inputs[1]
+        password_input.send_keys("@interval8#")
 
-    logs = driver.get_log("performance")
+        time.sleep(5)
 
-    with open("logs.json", "w", encoding="utf-8") as f:
-        f.write("[")
+        vk_signin_button = driver.find_element(By.CLASS_NAME, "flat_button")
+        vk_signin_button.click()
 
-        # Iterates every logs and parses it using JSON
-        for log in logs:
-            network_log = json.loads(log["message"])["message"]
+        time.sleep(5)
 
-            if (
-                "Network.response" in network_log["method"]
-                or "Network.request" in network_log["method"]
-            ):
-                f.write(json.dumps(network_log) + ",")
-                params = network_log.get("params", {})
-                response = params.get("response", {})
-                url: str = response.get("url", None)
-                if url is not None:
-                    print(url)
+        moi_gruppy = driver.find_element(By.CLASS_NAME, "group__item")
+        moi_gruppy.click()
 
-        f.write("{}]")
+        time.sleep(5)
 
-    # while True:
-    #     browser_log = driver.get_log("performance")
-    #     events = [process_browser_log_entry(entry) for entry in browser_log]
-    #     events = [event for event in events if "Network.response" in event["method"]]
-    #     if len(events) > 0:
-    #         with open("logs.json", "a") as write_file:
-    #             write_file.write(str(events))
-    #             write_file.write("\n")
-    #         write_file.close()
-    #     for e in events:
-    #         params = e.get("params", {})
-    #         response = params.get("response", {})
-    #         url: str = response.get("url", None)
-    #         if url is None:
-    #             continue
-    #         if "master" in url:
-    #             print(url)
-    #             break
-    #     else:
-    #         continue
-    #     break
+        lessons = driver.find_elements(By.CLASS_NAME, "list__item")
+        lesson_button = lessons[0].find_element(By.CLASS_NAME, "link")
+        lesson_button.click()
+
+        time.sleep(10)
+
+        video = driver.find_element(By.CLASS_NAME, "content__video")
+        video.click()
+
+        time.sleep(10)
+
+        har_logs = proxy.har  # type is dict
+        url = ""
+        for entry in har_logs["log"]["entries"]:
+            if entry["request"]["url"].endswith(".mpd"):
+                url = entry["request"]["url"]
+        print(url)
+
+    except Exception as error:
+        print(error)
 
     time.sleep(1000)
     driver.close()
