@@ -22,6 +22,7 @@ def driver_settings(proxy, headless: bool = True):
 
     opts.add_argument("--ignore-certificate-errors")
     opts.add_argument("--proxy-server={0}".format(proxy))
+    opts.add_argument("--start-fullscreen")
 
     return opts, caps
 
@@ -46,8 +47,26 @@ def process_browser_logs_for_network_events(logs):
             yield log
 
 
+def new_tab(driver):
+    driver.switch_to.new_window("tab")
+    return
+
+
+def switch_to_window_number(driver, number):
+    driver.switch_to.window(driver.window_handles[number - 1])
+    return
+
+
+def close_window_number(driver, number):
+    switch_to_window_number(driver, number)
+    driver.close()
+    switch_to_window_number(driver, 1)
+    return
+
+
 def main():
-    try:
+    end_process = False
+    while not end_process:
         server = Server("binaries/browsermob-proxy-2.1.4/bin/browsermob-proxy")
         server.start()
         proxy = server.create_proxy()
@@ -66,65 +85,80 @@ def main():
 
         time.sleep(10)
 
-        signin_button = driver.find_element(By.CLASS_NAME, "button")
-        signin_button.click()
+        try:
+            signin_button = driver.find_element(By.CLASS_NAME, "button")
+            signin_button.click()
 
-        time.sleep(5)
+            time.sleep(5)
 
-        inputs = driver.find_elements(By.CLASS_NAME, "oauth_form_input")
-        phone_input = inputs[0]
-        phone_input.send_keys("+79065472854")
-        password_input = inputs[1]
-        password_input.send_keys("@interval8#")
+            inputs = driver.find_elements(By.CLASS_NAME, "oauth_form_input")
+            phone_input = inputs[0]
+            phone_input.send_keys("+79065472854")
+            password_input = inputs[1]
+            password_input.send_keys("@interval8#")
 
-        time.sleep(5)
+            time.sleep(5)
 
-        vk_signin_button = driver.find_element(By.CLASS_NAME, "flat_button")
-        vk_signin_button.click()
+            vk_signin_button = driver.find_element(By.CLASS_NAME, "flat_button")
+            vk_signin_button.click()
 
-        time.sleep(5)
+            time.sleep(5)
 
-        urls_json = json.load(open("downloads/urls.json"))
+            urls_json = json.load(open("downloads/urls.json"))
 
-        for url in urls_json["urls"][:3]:
-            driver.switch_to.new_window("tab")
-            driver.switch_to.window(driver.window_handles[0])
-            driver.close()
-            driver.switch_to.window(driver.window_handles[0])
+            mpd_urls_json = dict()
 
-            time.sleep(10)
+            for url in urls_json["urls"]:
+                new_tab(driver)
+                close_window_number(driver, 1)
 
-            driver.get(url)
+                driver.get(url)
 
-            time.sleep(10)
+                time.sleep(15)
 
-            all_divs = driver.find_elements(By.TAG_NAME, "div")
-            print(len(all_divs))
-            print(all_divs[0].text)
+                title_div = driver.find_element(
+                    By.CLASS_NAME, "page-description__info__description"
+                )
+                title_text = title_div.find_element(By.TAG_NAME, "h1").text
 
-            title_div = driver.find_element(
-                By.CLASS_NAME, "page-description__info__description"
-            )
-            title_text = title_div.find_element(By.TAG_NAME, "h1").text
+                if "Обществознание" in title_text:
+                    mpd_urls = []
+                    videos = driver.find_elements(By.CLASS_NAME, "content__video")
 
-            if "Обществознание" in title_text:
-                videos = driver.find_element(By.TAG_NAME, "video")
-                print(len(videos))
-                # video.click()
+                    for i, video in enumerate(videos):
+                        if i == len(videos) - 1 and not len(videos) == 1:
+                            driver.execute_script(
+                                "window.scrollTo(0, document.body.scrollHeight);"
+                            )
+                        else:
+                            video.location_once_scrolled_into_view
 
-                # time.sleep(10)
+                        time.sleep(3)
+                        video.click()
+                        time.sleep(10)
+                        video.click()
+                        time.sleep(3)
 
-                # har_logs = proxy.har  # type is dict
-                # url = ""
-                # for entry in har_logs["log"]["entries"]:
-                #     if entry["request"]["url"].endswith(".mpd"):
-                #         url = entry["request"]["url"]
-                # print(url)
+                    har_logs = proxy.har  # type is dict
+                    for entry in har_logs["log"]["entries"]:
+                        if entry["request"]["url"].endswith(".mpd"):
+                            mpd_urls.append(entry["request"]["url"])
 
-    except Exception as error:
-        print(error)
+                    mpd_urls_json[title_text] = mpd_urls
 
-    time.sleep(1000)
+                    print(mpd_urls)
+
+            with open("downloads/mpd_urls.json", "w") as outfile:
+                outfile.write(json.dumps(mpd_urls_json, ensure_ascii=False))
+            outfile.close()
+
+            end_process = True
+        except Exception as error:
+            print(error)
+            end_process = True
+            # driver.close()
+
+    # time.sleep(1000)
     driver.close()
 
 
