@@ -1,3 +1,5 @@
 selenium
 webdriver-manager
 browsermob-proxy 
+beautifulsoup4
+lxml
